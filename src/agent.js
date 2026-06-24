@@ -197,13 +197,30 @@ You should execute one tool at a time, check the result, and decide the next ste
         content: `Current State:\n${stateDesc}\n\nWhat is your next action?`
       });
 
-      const response = await this.openai.chat.completions.create({
-        model: "llama-3.3-70b-versatile", 
-        messages: this.messages,
-        tools: this.getTools(),
-        tool_choice: "auto",
-        parallel_tool_calls: false,
-      });
+      let response;
+      try {
+        response = await this.openai.chat.completions.create({
+          model: "llama-3.3-70b-versatile", 
+          messages: this.messages,
+          tools: this.getTools(),
+          tool_choice: "auto",
+          parallel_tool_calls: false,
+        });
+      } catch (error) {
+        if (error.error && error.error.failed_generation) {
+          console.warn("[Agent] Model formatting error detected. Recovering...");
+          if (error.error.failed_generation.includes('task_complete')) {
+            console.log(`\n[Agent] Task finished successfully! Summary: ${error.error.failed_generation}`);
+            break;
+          }
+          this.messages.push({
+            role: "user",
+            content: `System Error: You failed to call the function properly. Please use the standard JSON tool calling format.`
+          });
+          continue;
+        }
+        throw error;
+      }
 
       const responseMessage = response.choices[0].message;
       this.messages.push(responseMessage);
